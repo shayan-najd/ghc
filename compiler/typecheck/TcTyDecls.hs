@@ -124,7 +124,8 @@ synonymTyConsOfType ty
      go_co (CoVarCo _)            = emptyNameEnv
      go_co (HoleCo {})            = emptyNameEnv
      go_co (AxiomInstCo _ _ cs)   = go_co_s cs
-     go_co (UnivCo p _ ty ty')    = go_prov p `plusNameEnv` go ty `plusNameEnv` go ty'
+     go_co (UnivCo p _ ty ty')    = go_prov p `plusNameEnv` go ty
+                                    `plusNameEnv` go ty'
      go_co (SymCo co)             = go_co co
      go_co (TransCo co co')       = go_co co `plusNameEnv` go_co co'
      go_co (NthCo _ _ co)         = go_co co
@@ -226,7 +227,8 @@ checkSynCycles this_uid tcs tyclds = do
         ppr_decl tc =
           case lookupNameEnv lcl_decls n of
             Just (dL->(loc , decl)) -> ppr loc <> colon <+> ppr decl
-            Nothing -> ppr (getSrcSpan n) <> colon <+> ppr n <+> text "from external module"
+            Nothing -> ppr (getSrcSpan n) <> colon <+> ppr n
+                           <+> text "from external module"
          where
           n = tyConName tc
 
@@ -313,15 +315,18 @@ checkClassCycles cls
        | Just (tc, tys) <- tcSplitTyConApp_maybe pred
        = go_tc so_far pred tc tys
        | hasTyVarHead pred
-       = Just (False, hang (text "one of whose superclass constraints is headed by a type variable:")
-                         2 (quotes (ppr pred)))
+       = Just (False
+              , hang (text $ "one of whose superclass constraints "
+                             ++ "is headed by a type variable:")
+                     2 (quotes (ppr pred)))
        | otherwise
        = Nothing
 
     go_tc :: NameSet -> PredType -> TyCon -> [Type] -> Maybe (Bool, SDoc)
     go_tc so_far pred tc tys
       | isFamilyTyCon tc
-      = Just (False, hang (text "one of whose superclass constraints is headed by a type family:")
+      = Just (False, hang (text $ "one of whose superclass constraints "
+                                  ++ "is headed by a type family:")
                         2 (quotes (ppr pred)))
       | Just cls <- tyConClass_maybe tc
       = go_cls so_far cls tys
@@ -378,7 +383,8 @@ tycon's parameters, so we use the datacon's univ parameters in the mapping from
 vars to positions. Note also that we don't want to infer roles for existentials
 (they're all at N, too), so we put them in the set of local variables. As an
 optimisation, we skip any tycons whose roles are already all Nominal, as there
-nowhere else for them to go. For synonyms, we just analyse their right-hand sides.
+nowhere else for them to go. For synonyms, we just analyse their right-hand
+sides.
 
 irType walks through a type, looking for uses of a variable of interest and
 propagating role information. Because anything used under a phantom position
@@ -445,10 +451,11 @@ so we need to take into account
 
 Note [Coercions in role inference]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-Is (t |> co1) representationally equal to (t |> co2)? Of course they are! Changing
-the kind of a type is totally irrelevant to the representation of that type. So,
-we want to totally ignore coercions when doing role inference. This includes omitting
-any type variables that appear in nominal positions but only within coercions.
+Is (t |> co1) representationally equal to (t |> co2)? Of course they are!
+Changing the kind of a type is totally irrelevant to the representation of that
+type. So, we want to totally ignore coercions when doing role inference. This
+includes omitting any type variables that appear in nominal positions but only
+within coercions.
 -}
 
 type RolesInfo = Name -> [Role]
@@ -545,8 +552,9 @@ irTyCon :: TyCon -> RoleM ()
 irTyCon tc
   | isAlgTyCon tc
   = do { old_roles <- lookupRoles tc
-       ; unless (all (== Nominal) old_roles) $  -- also catches data families,
-                                                -- which don't want or need role inference
+       ; unless (all (== Nominal) old_roles) $
+         -- also catches data families,
+         -- which don't want or need role inference
          irTcTyVars tc $
          do { mapM_ (irType emptyVarSet) (tyConStupidTheta tc)  -- See #8958
             ; whenIsJust (tyConClass_maybe tc) irClass
@@ -736,8 +744,8 @@ updateRoleEnv name n role
            Just roles -> let (before, old_role : after) = splitAt n roles in
                          if role `ltRole` old_role
                          then let roles' = before ++ role : after
-                                  role_env' = extendNameEnv role_env name roles' in
-                              RIS { role_env = role_env', update = True }
+                                  role_env' = extendNameEnv role_env name roles'
+                              in  RIS { role_env = role_env', update = True }
                          else state )
 
 
@@ -899,7 +907,8 @@ mkOneRecordSelector all_cons idDetails fl
     rec_fields = HsRecFields { rec_flds = [rec_field], rec_dotdot = Nothing }
     rec_field  = noLoc (HsRecField
                         { hsRecFieldLbl
-                           = cL loc (FieldOcc sel_name (cL loc $ mkVarUnqual lbl))
+                           = cL loc (FieldOcc sel_name (cL loc
+                                                        $ mkVarUnqual lbl))
                         , hsRecFieldArg
                            = cL loc (VarPat noExt (cL loc field_var))
                         , hsRecPun = False })
@@ -913,7 +922,8 @@ mkOneRecordSelector all_cons idDetails fl
           | otherwise = [mkSimpleMatch CaseAlt
                             [cL loc (WildPat noExt)]
                             (mkHsApp (cL loc (HsVar noExt
-                                            (cL loc (getName rEC_SEL_ERROR_ID))))
+                                            (cL loc
+                                               (getName rEC_SEL_ERROR_ID))))
                                      (cL loc (HsLit noExt msg_lit)))]
 
         -- Do not add a default case unless there are unmatched
@@ -975,8 +985,9 @@ sel_naughty field.
 
 Note [GADT record selectors]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-For GADTs, we require that all constructors with a common field 'f' have the same
-result type (modulo alpha conversion).  [Checked in TcTyClsDecls.checkValidTyCon]
+For GADTs, we require that all constructors with a common field 'f' have the
+same result type (modulo alpha conversion).
+[Checked in TcTyClsDecls.checkValidTyCon]
 E.g.
         data T where
           T1 { f :: Maybe a } :: T [a]

@@ -1795,9 +1795,11 @@ funPrologue live cmmBlocks = do
       getAssignedRegs (CmmAssign reg _)  = [reg]
       -- Calls will trash all registers. Unfortunately, this needs them to
       -- be stack-allocated in the first place.
-      getAssignedRegs (CmmUnsafeForeignCall _ rs _) = map CmmGlobal trash ++ map CmmLocal rs
+      getAssignedRegs (CmmUnsafeForeignCall _ rs _) = map CmmGlobal trash
+                                                      ++ map CmmLocal rs
       getAssignedRegs _                  = []
-      getRegsBlock (_, body, _)          = concatMap getAssignedRegs $ blockToList body
+      getRegsBlock (_, body, _)          = concatMap getAssignedRegs
+                                           $ blockToList body
       assignedRegs = nub $ concatMap (getRegsBlock . blockSplit) cmmBlocks
       isLive r     = r `elem` alwaysLive || r `elem` live
 

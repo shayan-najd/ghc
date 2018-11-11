@@ -37,8 +37,8 @@ module   RdrHsSyn (
         mkImport,
         parseCImport,
         mkExport,
-        mkExtName,           -- RdrName -> CLabelString
-        mkGadtDecl,          -- [Located RdrName] -> LHsType RdrName -> ConDecl RdrName
+        mkExtName,  -- RdrName -> CLabelString
+        mkGadtDecl, -- [Located RdrName] -> LHsType RdrName -> ConDecl RdrName
         mkConDeclH98,
         mkATDefault,
 
@@ -261,7 +261,8 @@ mkTyFamInstEqn bndrs lhs rhs
 mkDataFamInst :: SrcSpan
               -> NewOrData
               -> Maybe (Located CType)
-              -> Located (Maybe (LHsContext GhcPs), Maybe [LHsTyVarBndr GhcPs], LHsType GhcPs)
+              -> Located ( Maybe (LHsContext GhcPs), Maybe [LHsTyVarBndr GhcPs]
+                         , LHsType GhcPs)
               -> Maybe (LHsKind GhcPs)
               -> [LConDecl GhcPs]
               -> HsDeriving GhcPs
@@ -385,7 +386,7 @@ cvTopDecls decls = go (fromOL decls)
 -- Declaration list may only contain value bindings and signatures.
 cvBindGroup :: OrdList (LHsDecl GhcPs) -> P (HsValBinds GhcPs)
 cvBindGroup binding
-  = do { (mbs, sigs, fam_ds, tfam_insts, dfam_insts, _) <- cvBindsAndSigs binding
+  = do { (mbs, sigs, fam_ds,tfam_insts, dfam_insts, _) <- cvBindsAndSigs binding
        ; ASSERT( null fam_ds && null tfam_insts && null dfam_insts)
          return $ ValBinds noExt mbs sigs }
 
@@ -596,14 +597,16 @@ mkPatSynMatchGroup (dL->(loc , patsyn_name)) (dL->(_ , decls)) =
                                                 , m_ctxt = ctxt, m_pats = pats
                                                 , m_grhss = rhs }
                    where
-                     ctxt = FunRhs { mc_fun = ln, mc_fixity = Prefix, mc_strictness = NoSrcStrict }
+                     ctxt = FunRhs { mc_fun = ln, mc_fixity = Prefix
+                                   , mc_strictness = NoSrcStrict }
 
                InfixCon p1 p2 -> return $ Match { m_ext = noExt
                                                 , m_ctxt = ctxt
                                                 , m_pats = [p1, p2]
                                                 , m_grhss = rhs }
                    where
-                     ctxt = FunRhs { mc_fun = ln, mc_fixity = Infix, mc_strictness = NoSrcStrict }
+                     ctxt = FunRhs { mc_fun = ln, mc_fixity = Infix
+                                   , mc_strictness = NoSrcStrict }
 
                RecCon{} -> recordPatSynErr loc pat
            ; return $ cL loc match }
@@ -616,7 +619,8 @@ mkPatSynMatchGroup (dL->(loc , patsyn_name)) (dL->(_ , decls)) =
 
     wrongNameBindingErr loc decl =
         parseErrorSDoc loc $
-        text "pattern synonym 'where' clause must bind the pattern synonym's name" <+>
+        text ("pattern synonym 'where' clause must bind "
+              ++ "the pattern synonym's name") <+>
         quotes (ppr patsyn_name) $$ ppr decl
 
     wrongNumberErr loc =
@@ -663,9 +667,9 @@ mkGadtDecl names ty
     (tvs, rho) = splitLHsForAllTy ty'
     (mcxt, tau, anns2) = split_rho rho []
 
-    split_rho (dL->(_ , HsQualTy { hst_ctxt = cxt, hst_body = tau })) ann
+    split_rho (dL->(_ ,HsQualTy { hst_ctxt = cxt, hst_body = tau })) ann
                                        = (Just cxt, tau, ann)
-    split_rho (dL->(l , HsParTy _ ty)) ann = split_rho ty (ann++mkParensApiAnn l)
+    split_rho (dL->(l ,HsParTy _ ty)) ann = split_rho ty (ann++mkParensApiAnn l)
     split_rho tau                  ann = (Nothing, tau, ann)
 
     (args, res_ty) = split_tau tau
@@ -823,7 +827,8 @@ checkTyVars pp_what equals_or_where tc tparms
         -- Keep around an action for adjusting the annotations of extra parens
     chkParens :: [AddAnn] -> LHsType GhcPs
               -> Either (SrcSpan, SDoc) (LHsTyVarBndr GhcPs, P ())
-    chkParens acc (dL->(l , HsParTy _ ty)) = chkParens (mkParensApiAnn l ++ acc) ty
+    chkParens acc (dL->(l ,HsParTy _ ty))
+                     = chkParens (mkParensApiAnn l ++ acc) ty
     chkParens acc ty = case chk ty of
       Left err -> Left err
       Right tv@(dL->(l , _)) -> Right (tv, addAnnsAt l (reverse acc))
@@ -836,11 +841,17 @@ checkTyVars pp_what equals_or_where tc tparms
     chk t@(dL->(loc , _))
         = Left (loc,
                 vcat [ text "Unexpected type" <+> quotes (ppr t)
-                     , text "In the" <+> pp_what <+> ptext (sLit "declaration for") <+> quotes tc'
-                     , vcat[ (text "A" <+> pp_what <+> ptext (sLit "declaration should have form"))
-                     , nest 2 (pp_what <+> tc'
-                                       <+> hsep (map text (takeList tparms allNameStrings))
-                                       <+> equals_or_where) ] ])
+                     , text "In the"
+                       <+> pp_what
+                       <+> ptext (sLit "declaration for")
+                       <+> quotes tc'
+                     , vcat[ (text "A" <+> pp_what
+                              <+> ptext (sLit "declaration should have form"))
+                     , nest 2
+                       (pp_what
+                        <+> tc'
+                        <+> hsep (map text (takeList tparms allNameStrings))
+                        <+> equals_or_where) ] ])
 
     -- Avoid printing a constraint tuple in the error message. Print
     -- a plain old tuple instead (since that's what the user probably
@@ -871,14 +882,16 @@ data RuleTyTmVar = RuleTyTmVar (Located RdrName) (Maybe (LHsType GhcPs))
 mkRuleBndrs :: [LRuleTyTmVar] -> [LRuleBndr GhcPs]
 mkRuleBndrs = fmap (fmap cvt_one)
   where cvt_one (RuleTyTmVar v Nothing)    = RuleBndr    noExt v
-        cvt_one (RuleTyTmVar v (Just sig)) = RuleBndrSig noExt v (mkLHsSigWcType sig)
+        cvt_one (RuleTyTmVar v (Just sig)) = RuleBndrSig noExt v
+                                               (mkLHsSigWcType sig)
 
 -- turns RuleTyTmVars into HsTyVarBndrs - this is more interesting
 mkRuleTyVarBndrs :: [LRuleTyTmVar] -> [LHsTyVarBndr GhcPs]
 mkRuleTyVarBndrs = fmap (fmap cvt_one)
   where cvt_one (RuleTyTmVar v Nothing)    = UserTyVar   noExt (fmap tm_to_ty v)
-        cvt_one (RuleTyTmVar v (Just sig)) = KindedTyVar noExt (fmap tm_to_ty v) sig
-        -- takes something in namespace 'varName' to something in namespace 'tvName'
+        cvt_one (RuleTyTmVar v (Just sig)) = KindedTyVar noExt (fmap tm_to_ty v)
+                                               sig
+    -- takes something in namespace 'varName' to something in namespace 'tvName'
         tm_to_ty (Unqual occ) = Unqual (setOccNameSpace tvName occ)
         tm_to_ty _ = panic "mkRuleTyVarBndrs"
 
@@ -887,7 +900,8 @@ checkRuleTyVarBndrNames :: [LHsTyVarBndr GhcPs] -> P ()
 checkRuleTyVarBndrNames = mapM_ (check . fmap hsTyVarName)
   where check (dL->(loc , Unqual occ)) = do
           when ((occNameString occ ==) `any` ["forall","family","role"])
-               (parseErrorSDoc loc (text $ "parse error on input " ++ occNameString occ))
+               (parseErrorSDoc loc (text $ "parse error on input "
+                                           ++ occNameString occ))
         check _ = panic "checkRuleTyVarBndrNames"
 
 checkRecordSyntax :: Outputable a => Located a -> P (Located a)
@@ -896,8 +910,8 @@ checkRecordSyntax lr@(dL->(loc , r))
          if allowed
              then return lr
              else parseErrorSDoc loc
-                      (text "Illegal record syntax (use TraditionalRecordSyntax):" <+>
-                       ppr r)
+                    (text "Illegal record syntax (use TraditionalRecordSyntax):"
+                     <+> ppr r)
 
 -- | Check if the gadt_constrlist is empty. Only raise parse error for
 -- `data T where` to avoid affecting existing error message, see #8258.
@@ -949,7 +963,7 @@ checkTyClHdr is_cls ty
         arity = length ts
         tup_name | is_cls    = cTupleTyConName arity
                  | otherwise = getName (tupleTyCon Boxed arity)
-                 -- See Note [Unit tuples] in HsTypes  (TODO: is this still relevant?)
+        -- See Note [Unit tuples] in HsTypes  (TODO: is this still relevant?)
     go l _ _ _ _
       = parseErrorSDoc l (text "Malformed head of type or class declaration:"
                           <+> ppr ty)
@@ -1061,7 +1075,8 @@ checkAPat msg loc e0 = do
    EWildPat _ -> return (WildPat noExt)
    HsVar _ x  -> return (VarPat noExt x)
    HsLit _ (HsStringPrim _ _) -- (#13260)
-       -> parseErrorSDoc loc (text "Illegal unboxed string literal in pattern:" $$ ppr e0)
+       -> parseErrorSDoc loc (text "Illegal unboxed string literal in pattern:"
+                              $$ ppr e0)
 
    HsLit _ l  -> return (LitPat noExt l)
 
@@ -1111,7 +1126,8 @@ checkAPat msg loc e0 = do
      | all tupArgPresent es  -> do ps <- mapM (checkLPat msg)
                                            [e | (dL->(_ , Present _ e)) <- es]
                                    return (TuplePat noExt ps b)
-     | otherwise -> parseErrorSDoc loc (text "Illegal tuple section in pattern:" $$ ppr e0)
+     | otherwise -> parseErrorSDoc loc (text "Illegal tuple section in pattern:"
+                                        $$ ppr e0)
 
    ExplicitSum _ alt arity expr -> do
      p <- checkLPat msg expr
@@ -1126,7 +1142,8 @@ checkAPat msg loc e0 = do
 
 placeHolderPunRhs :: LHsExpr GhcPs
 -- The RHS of a punned record field will be filled in by the renamer
--- It's better not to make it an error, in case we want to print it when debugging
+-- It's better not to make it an error, in case we want to print it
+-- when debugging
 placeHolderPunRhs = noLoc (HsVar noExt (noLoc pun_RDR))
 
 plus_RDR, bang_RDR, pun_RDR :: RdrName
@@ -1187,9 +1204,10 @@ checkFunBind msg strictness ann lhs_loc fun is_infix pats (dL->(rhs_span,grhss))
         -- mapM_ (\a -> a match_span) ann
         return (ann, makeFunBind fun
                   [cL match_span (Match { m_ext = noExt
-                                       , m_ctxt = FunRhs { mc_fun    = fun
-                                                         , mc_fixity = is_infix
-                                                         , mc_strictness = strictness }
+                                       , m_ctxt = FunRhs
+                                                  { mc_fun    = fun
+                                                  , mc_fixity = is_infix
+                                                  , mc_strictness = strictness }
                                        , m_pats = ps
                                        , m_grhss = grhss })])
         -- The span of the match covers the entire equation.
@@ -1236,7 +1254,8 @@ checkValSigLhs lhs@(dL->(l , _))
 
     -- A common error is to forget the ForeignFunctionInterface flag
     -- so check for that, and suggest.  cf Trac #3805
-    -- Sadly 'foreign import' still barfs 'parse error' because 'import' is a keyword
+    -- Sadly 'foreign import' still barfs 'parse error' because
+    -- 'import' is a keyword
     looks_like s (dL->(_ , HsVar _ (dL->(_ , v)))) = v == s
     looks_like s (dL->(_ , HsApp _ lhs _))   = looks_like s lhs
     looks_like _ _                       = False
@@ -1316,7 +1335,8 @@ isFunLhs e = go e [] []
         --      a `K1` b `op` c `K2` d
         -- must parse as
         --      (a `K1` b) `op` (c `K2` d)
-        -- The renamer checks later that the precedences would yield such a parse.
+        -- The renamer checks later that the precedences would yield such a
+        -- parse.
         --
         -- There is a complication to deal with bang patterns.
         --
@@ -1906,7 +1926,8 @@ mkRdrRecordCon con flds
 
 mk_rec_fields :: [LHsRecField id arg] -> Bool -> HsRecFields id arg
 mk_rec_fields fs False = HsRecFields { rec_flds = fs, rec_dotdot = Nothing }
-mk_rec_fields fs True  = HsRecFields { rec_flds = fs, rec_dotdot = Just (length fs) }
+mk_rec_fields fs True  = HsRecFields { rec_flds = fs
+                                     , rec_dotdot = Just (length fs) }
 
 mk_rec_upd_field :: HsRecField GhcPs (LHsExpr GhcPs) -> HsRecUpdField GhcPs
 mk_rec_upd_field (HsRecField (dL->(loc , FieldOcc _ rdr)) arg pun)
@@ -2013,8 +2034,9 @@ parseCImport cconv safety nm str sourceText =
    mk h n = CImport cconv safety h n sourceText
 
    hdr_char c = not (isSpace c) -- header files are filenames, which can contain
-                                -- pretty much any char (depending on the platform),
-                                -- so just accept any non-space character
+                                -- pretty much any char (depending on the
+                                -- platform), so just accept any non-space
+                                -- character
    id_first_char c = isAlpha    c || c == '_'
    id_char       c = isAlphaNum c || c == '_'
 
@@ -2080,7 +2102,8 @@ mkModuleImpExp (dL->(l , specname)) subs =
       | otherwise        -> IEThingAbs noExt . cL l <$> nameT
     ImpExpAll            -> IEThingAll noExt . cL l <$> nameT
     ImpExpList xs        ->
-      (\newName -> IEThingWith noExt (cL l newName) NoIEWildcard (wrapped xs) [])
+      (\newName -> IEThingWith noExt (cL l newName) NoIEWildcard
+                     (wrapped xs) [])
         <$> nameT
     ImpExpAllWith xs                       ->
       do allowed <- extension patternSynonymsEnabled
@@ -2090,8 +2113,8 @@ mkModuleImpExp (dL->(l , specname)) subs =
                 pos   = maybe NoIEWildcard IEWildcard
                           (findIndex isImpExpQcWildcard withs)
                 ies   = wrapped $ filter (not . isImpExpQcWildcard . unLoc) xs
-            in (\newName
-                        -> IEThingWith noExt (cL l newName) pos ies []) <$> nameT
+            in (\newName -> IEThingWith noExt (cL l newName) pos ies [])
+                            <$> nameT
           else parseErrorSDoc l
             (text "Illegal export form (use PatternSynonyms to enable)")
   where
@@ -2102,8 +2125,10 @@ mkModuleImpExp (dL->(l , specname)) subs =
               (text "Expecting a type constructor but found a variable,"
                <+> quotes (ppr name) <> text "."
               $$ if isSymOcc $ rdrNameOcc name
-                   then text "If" <+> quotes (ppr name) <+> text "is a type constructor"
-                    <+> text "then enable ExplicitNamespaces and use the 'type' keyword."
+                   then text "If" <+> quotes (ppr name)
+                        <+> text "is a type constructor"
+                        <+> text ("then enable ExplicitNamespaces "
+                                  ++ "and use the 'type' keyword.")
                    else empty)
         else return $ ieNameFromSpec specname
 
@@ -2188,7 +2213,7 @@ failOpDocPrev loc = parseErrorSDoc loc msg
     msg = text "Unexpected documentation comment."
 
 failOpStrictnessCompound :: Located SrcStrictness -> LHsType GhcPs -> P a
-failOpStrictnessCompound (dL->(_ ,str)) (dL->(loc , ty)) = parseErrorSDoc loc msg
+failOpStrictnessCompound (dL->(_ ,str)) (dL->(loc,ty)) = parseErrorSDoc loc msg
   where
     msg = text "Strictness annotation applied to a compound type." $$
           text "Did you mean to add parentheses?" $$
@@ -2226,11 +2251,13 @@ mkSumOrTuple boxity _ (Tuple es) = return (ExplicitTuple noExt es boxity)
 mkSumOrTuple Unboxed _ (Sum alt arity e) =
     return (ExplicitSum noExt alt arity e)
 mkSumOrTuple Boxed l (Sum alt arity (dL->(_ , e))) =
-    parseErrorSDoc l (hang (text "Boxed sums not supported:") 2 (ppr_boxed_sum alt arity e))
+    parseErrorSDoc l (hang (text "Boxed sums not supported:") 2
+                        (ppr_boxed_sum alt arity e))
   where
     ppr_boxed_sum :: ConTag -> Arity -> HsExpr GhcPs -> SDoc
     ppr_boxed_sum alt arity e =
-      text "(" <+> ppr_bars (alt - 1) <+> ppr e <+> ppr_bars (arity - alt) <+> text ")"
+      text "(" <+> ppr_bars (alt - 1) <+> ppr e <+> ppr_bars (arity - alt)
+      <+> text ")"
 
     ppr_bars n = hsep (replicate n (Outputable.char '|'))
 

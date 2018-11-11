@@ -2017,10 +2017,11 @@ tcUserStmt (dL->(loc , BodyStmt _ expr _ _))
                                    (noLoc emptyLocalBinds)]
               -- [it = expr]
               the_bind  = cL loc $ (mkTopFunBind FromSource
-                                     (cL loc fresh_it) matches) { fun_ext = fvs }
-                          -- Care here!  In GHCi the expression might have
-                          -- free variables, and they in turn may have free type variables
-                          -- (if we are at a breakpoint, say).  We must put those free vars
+                                      (cL loc fresh_it) matches)
+                                      { fun_ext = fvs }
+              -- Care here!  In GHCi the expression might have
+              -- free variables, and they in turn may have free type variables
+              -- (if we are at a breakpoint, say).  We must put those free vars
 
               -- [let it = expr]
               let_stmt  = cL loc $ LetStmt noExt $ noLoc $ HsValBinds noExt
@@ -2059,22 +2060,23 @@ tcUserStmt (dL->(loc , BodyStmt _ expr _ _))
               -- See Note [GHCi Plans]
 
               it_plans = [
-                    -- Plan A
+                       -- Plan A
                     do { stuff@([it_id], _) <- tcGhciStmts [bind_stmt, print_it]
                        ; it_ty <- zonkTcType (idType it_id)
                        ; when (isUnitTy $ it_ty) failM
                        ; return stuff },
 
-                        -- Plan B; a naked bind statement
+                       -- Plan B; a naked bind statement
                     tcGhciStmts [bind_stmt],
 
-                        -- Plan C; check that the let-binding is typeable all by itself.
-                        -- If not, fail; if so, try to print it.
-                        -- The two-step process avoids getting two errors: one from
-                        -- the expression itself, and one from the 'print it' part
-                        -- This two-step story is very clunky, alas
+                       -- Plan C; check that the let-binding is typeable all by
+                       -- itself. If not, fail; if so, try to print it.
+                       -- The two-step process avoids getting two errors: one
+                       -- from the expression itself, and one from the
+                       -- 'print it' part This two-step story is very clunky,
+                       -- alas
                     do { _ <- checkNoErrs (tcGhciStmts [let_stmt])
-                                --- checkNoErrs defeats the error recovery of let-bindings
+                       -- checkNoErrs defeats the error recovery of let-bindings
                        ; tcGhciStmts [let_stmt, print_it] } ]
 
               -- Plans where we don't bind "it"

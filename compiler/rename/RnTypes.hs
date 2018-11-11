@@ -48,7 +48,8 @@ import RnEnv
 import RnUnbound        ( perhapsForallMsg )
 import RnUtils          ( HsDocContext(..), withHsDocContext, mapFvRn
                         , pprHsDocContext, bindLocalNamesFV
-                        , newLocalBndrRn, checkDupRdrNames, checkShadowedRdrNames )
+                        , newLocalBndrRn, checkDupRdrNames
+                        , checkShadowedRdrNames )
 import RnFixity         ( lookupFieldFixityRn, lookupFixityRn
                         , lookupTyFixityRn )
 import TcRnMonad
@@ -101,12 +102,12 @@ rnHsSigWcType scoping doc sig_ty
     return (sig_ty', emptyFVs)
 
 rnHsSigWcTypeScoped :: HsSigWcTypeScoping
-                       -- AlwaysBind: for pattern type sigs and rules we /do/ want
-                       --             to bring those type variables into scope, even
-                       --             if there's a forall at the top which usually
-                       --             stops that happening
-                       -- e.g  \ (x :: forall a. a-> b) -> e
-                       -- Here we do bring 'b' into scope
+                   -- AlwaysBind: for pattern type sigs and rules we /do/ want
+                   --             to bring those type variables into scope, even
+                   --             if there's a forall at the top which usually
+                   --             stops that happening
+                   -- e.g  \ (x :: forall a. a-> b) -> e
+                   -- Here we do bring 'b' into scope
                     -> HsDocContext -> LHsSigWcType GhcPs
                     -> (LHsSigWcType GhcRn -> RnM (a, FreeVars))
                     -> RnM (a, FreeVars)
@@ -177,7 +178,8 @@ rnWcBody ctxt nwc_rdrs hs_ty
     rn_ty :: RnTyKiEnv -> HsType GhcPs -> RnM (HsType GhcRn, FreeVars)
     -- A lot of faff just to allow the extra-constraints wildcard to appear
     rn_ty env hs_ty@(HsForAllTy { hst_bndrs = tvs, hst_body = hs_body })
-      = bindLHsTyVarBndrs (rtke_ctxt env) (Just $ inTypeDoc hs_ty) Nothing tvs $ \ tvs' ->
+      = bindLHsTyVarBndrs (rtke_ctxt env) (Just $ inTypeDoc hs_ty) Nothing tvs
+        $ \ tvs' ->
         do { (hs_body', fvs) <- rn_lty env hs_body
            ; return (HsForAllTy { hst_xforall = noExt, hst_bndrs = tvs'
                                 , hst_body = hs_body' }, fvs) }
@@ -621,7 +623,9 @@ rnHsTyKi env tyLit@(HsTyLit _ t)
   where
     negLit (HsStrTy _ _) = False
     negLit (HsNumTy _ i) = i < 0
-    negLitErr = text "Illegal literal in type (type literals must not be negative):" <+> ppr tyLit
+    negLitErr =
+      text "Illegal literal in type (type literals must not be negative):"
+      <+> ppr tyLit
 
 rnHsTyKi env (HsAppTy _ ty1 ty2)
   = do { (ty1', fvs1) <- rnLHsTyKi env ty1
@@ -724,8 +728,9 @@ checkAnonWildCard env
     constraint_msg = hang
                          (notAllowed pprAnonWildCard <+> text "in a constraint")
                         2 hint_msg
-    hint_msg = vcat [ text "except as the last top-level constraint of a type signature"
-                    , nest 2 (text "e.g  f :: (Eq a, _) => blah") ]
+    hint_msg = vcat
+      [ text "except as the last top-level constraint of a type signature"
+      , nest 2 (text "e.g  f :: (Eq a, _) => blah") ]
 
 checkNamedWildCard :: RnTyKiEnv -> Name -> RnM ()
 -- Report an error if a named wildcard is illegal here
@@ -857,7 +862,8 @@ bindHsQTyVars doc mb_in_doc mb_assoc body_kv_occs hsq_bndrs thing_inside
              -- Can't use implicit_kvs because we've deleted bndrs from that!
              dep_bndrs = filter (`elemRdr` kv_occs) bndrs
              del       = deleteBys eqLocated
-             all_bound_on_lhs = null ((body_kv_occs `del` bndrs) `del` bndr_kv_occs)
+             all_bound_on_lhs = null ((body_kv_occs `del` bndrs)
+                                      `del` bndr_kv_occs)
 
        ; traceRn "checkMixedVars3" $
            vcat [ text "kv_occs" <+> ppr kv_occs
@@ -870,7 +876,8 @@ bindHsQTyVars doc mb_in_doc mb_assoc body_kv_occs hsq_bndrs thing_inside
 
        ; bindLocalNamesFV implicit_kv_nms                     $
          bindLHsTyVarBndrs doc mb_in_doc mb_assoc hs_tv_bndrs $ \ rn_bndrs ->
-    do { traceRn "bindHsQTyVars" (ppr hsq_bndrs $$ ppr implicit_kv_nms $$ ppr rn_bndrs)
+    do { traceRn "bindHsQTyVars" (ppr hsq_bndrs $$ ppr implicit_kv_nms
+                                  $$ ppr rn_bndrs)
        ; dep_bndr_nms <- mapM (lookupLocalOccRn . unLoc) dep_bndrs
        ; thing_inside (HsQTvs { hsq_ext = HsQTvsRn
                                    { hsq_implicit  = implicit_kv_nms
@@ -992,7 +999,8 @@ NB: we do this only at the binding site of 'tvs'.
 
 bindLHsTyVarBndrs :: HsDocContext
                   -> Maybe SDoc            -- Just d => check for unused tvs
-                                           --   d is a phrase like "in the type ..."
+                                           --   d is a phrase like
+                                           --                  "in the type ..."
                   -> Maybe a               -- Just _  => an associated type decl
                   -> [LHsTyVarBndr GhcPs]  -- User-written tyvars
                   -> ([LHsTyVarBndr GhcRn] -> RnM (b, FreeVars))
@@ -1123,7 +1131,8 @@ rnField fl_env env (dL->(l , ConDeclField _ names ty haddock_doc))
                 , fvs) }
   where
     lookupField :: FieldOcc GhcPs -> FieldOcc GhcRn
-    lookupField (FieldOcc _ (dL->(lr , rdr))) = FieldOcc (flSelector fl) (cL lr rdr)
+    lookupField (FieldOcc _ (dL->(lr , rdr))) =
+      FieldOcc (flSelector fl) (cL lr rdr)
       where
         lbl = occNameFS $ rdrNameOcc rdr
         fl  = expectJust "rnField" $ lookupFsEnv fl_env lbl
@@ -1229,7 +1238,7 @@ mkOpAppRn e1@(dL->(_ , NegApp _ neg_arg neg_name)) op2 fix2 e2
 
 ---------------------------
 --      e1 `op` - neg_arg
-mkOpAppRn e1 op1 fix1 e2@(dL->(_ , NegApp {}))     -- NegApp can occur on the right
+mkOpAppRn e1 op1 fix1 e2@(dL->(_ , NegApp {})) -- NegApp can occur on the right
   | not associate_right                 -- We *want* right association
   = do precParseErr (get_op op1, fix1) (NegateOp, negateFixity)
        return (OpApp fix1 e1 op1 e2)
@@ -1240,7 +1249,8 @@ mkOpAppRn e1 op1 fix1 e2@(dL->(_ , NegApp {}))     -- NegApp can occur on the ri
 --      Default case
 mkOpAppRn e1 op fix e2                  -- Default case, no rearrangment
   = ASSERT2( right_op_ok fix (unLoc e2),
-             ppr e1 $$ text "---" $$ ppr op $$ text "---" $$ ppr fix $$ text "---" $$ ppr e2
+             ppr e1 $$ text "---" $$ ppr op $$ text "---" $$ ppr fix
+             $$ text "---" $$ ppr e2
     )
     return (OpApp fix e1 op e2)
 
@@ -1332,7 +1342,8 @@ mkConOpPatRn op2 fix2 p1@(dL->(loc , ConPatIn op1 (InfixCon p11 p12))) p2
 
           else if associate_right then do
                 { new_p <- mkConOpPatRn op2 fix2 p12 p2
-                ; return (ConPatIn op1 (InfixCon p11 (cL loc new_p))) } -- XXX loc right?
+                ; return (ConPatIn op1 (InfixCon p11 (cL loc new_p))) }
+                         -- XXX loc right?
           else return (ConPatIn op2 (InfixCon p1 p2)) }
 
 mkConOpPatRn op _ p1 p2                         -- Default case, no rearrangment
@@ -1433,9 +1444,11 @@ sectionPrecErr op@(n1,_) arg_op@(n2,_) section
   | is_unbound n1 || is_unbound n2
   = return ()     -- Avoid error cascade
   | otherwise
-  = addErr $ vcat [text "The operator" <+> ppr_opfix op <+> ptext (sLit "of a section"),
-         nest 4 (sep [text "must have lower precedence than that of the operand,",
-                      nest 2 (text "namely" <+> ppr_opfix arg_op)]),
+  = addErr $ vcat [text "The operator" <+> ppr_opfix op
+                   <+> ptext (sLit "of a section"),
+         nest 4 (sep
+                 [ text "must have lower precedence than that of the operand,"
+                 , nest 2 (text "namely" <+> ppr_opfix arg_op)]),
          nest 4 (text "in the section:" <+> quotes (ppr section))]
 
 is_unbound :: OpName -> Bool
@@ -1459,7 +1472,8 @@ ppr_opfix (op, fixity) = pp_op <+> brackets (ppr fixity)
 unexpectedTypeSigErr :: LHsSigWcType GhcPs -> SDoc
 unexpectedTypeSigErr ty
   = hang (text "Illegal type signature:" <+> quotes (ppr ty))
-       2 (text "Type signatures are only allowed in patterns with ScopedTypeVariables")
+  2
+  (text "Type signatures are only allowed in patterns with ScopedTypeVariables")
 
 badKindSigErr :: HsDocContext -> LHsType GhcPs -> TcM ()
 badKindSigErr doc (L loc ty)
@@ -1489,7 +1503,8 @@ warnUnusedForAll in_doc (dL->(loc , tv)) used_names
 
 opTyErr :: Outputable a => RdrName -> a -> SDoc
 opTyErr op overall_ty
-  = hang (text "Illegal operator" <+> quotes (ppr op) <+> ptext (sLit "in type") <+> quotes (ppr overall_ty))
+  = hang (text "Illegal operator" <+> quotes (ppr op) <+> ptext (sLit "in type")
+          <+> quotes (ppr overall_ty))
          2 extra
   where
     extra | op == dot_tv_RDR
@@ -1724,7 +1739,7 @@ extractRdrKindSigVars :: LFamilyResultSig GhcPs -> [Located RdrName]
 -- See Note [Ordering of implicit variables].
 extractRdrKindSigVars (dL->(_ , resultSig))
     | KindSig _ k                          <- resultSig = kindRdrNameFromSig k
-    | TyVarSig _ (dL->(_ , KindedTyVar _ _ k)) <- resultSig = kindRdrNameFromSig k
+    | TyVarSig _ (dL->(_,KindedTyVar _ _ k)) <- resultSig = kindRdrNameFromSig k
     | otherwise =  []
     where
       kindRdrNameFromSig k = freeKiTyVarsAllVars (extractHsTyRdrTyVars k)

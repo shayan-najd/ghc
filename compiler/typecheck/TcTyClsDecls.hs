@@ -2325,7 +2325,8 @@ tcConArgs (RecCon fields)
   = mapM tcConArg btys
   where
     -- We need a one-to-one mapping from field_names to btys
-    combined = map (\(dL->(_ , f)) -> (cd_fld_names f,cd_fld_type f)) (unLoc fields)
+    combined = map (\(dL->(_ , f)) -> (cd_fld_names f,cd_fld_type f))
+                   (unLoc fields)
     explode (ns,ty) = zip ns (repeat ty)
     exploded = concatMap explode combined
     (_,btys) = unzip exploded
