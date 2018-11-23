@@ -3,6 +3,8 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ViewPatterns #-}
+
 module TcRnExports (tcRnExports, exports_from_avail) where
 
 import GhcPrelude
@@ -206,7 +208,7 @@ exports_from_avail Nothing rdr_env _imports _this_mod
     fix_faminst avail = avail
 
 
-exports_from_avail (Just (L _ rdr_items)) rdr_env imports this_mod
+exports_from_avail (Just (dL->L _ rdr_items)) rdr_env imports this_mod
   = do ExportAccum ie_avails _
         <-  foldAndRecoverM do_litem emptyExportAccum rdr_items
        let final_exports = nubAvails (concat (map snd ie_avails)) -- Combine families
@@ -226,10 +228,11 @@ exports_from_avail (Just (L _ rdr_items)) rdr_env imports this_mod
 
     exports_from_item :: ExportAccum -> LIE GhcPs -> RnM ExportAccum
     exports_from_item acc@(ExportAccum ie_avails occs)
-                      (L loc ie@(IEModuleContents _ (L lm mod)))
+                      (dL->L loc ie@(IEModuleContents _ (dL->L lm mod)))
         | let earlier_mods
                 = [ mod
-                  | ((L _ (IEModuleContents _ (L _ mod))), _) <- ie_avails ]
+                  | ((dL->L _
+                       (IEModuleContents _ (dL->L _ mod))), _) <- ie_avails ]
         , mod `elem` earlier_mods    -- Duplicate export of M
         = do { warnIfFlag Opt_WarnDuplicateExports True
                           (dupModuleExport mod) ;
@@ -262,13 +265,14 @@ exports_from_avail (Just (L _ rdr_items)) rdr_env imports this_mod
                        (vcat [ ppr mod
                              , ppr new_exports ])
 
-             ; return (ExportAccum (((L loc (IEModuleContents noExt (L lm mod)))
-                                    , new_exports) : ie_avails) occs') }
+             ; return (ExportAccum
+                       (((cL loc (IEModuleContents noExt (cL lm mod)))
+                        , new_exports) : ie_avails) occs') }
 
-    exports_from_item acc@(ExportAccum lie_avails occs) (L loc ie)
+    exports_from_item acc@(ExportAccum lie_avails occs) (dL->L loc ie)
         | isDoc ie
         = do new_ie <- lookup_doc_ie ie
-             return (ExportAccum ((L loc new_ie, []) : lie_avails) occs)
+             return (ExportAccum ((cL loc new_ie, []) : lie_avails) occs)
 
         | otherwise
         = do (new_ie, avail) <-
@@ -279,17 +283,18 @@ exports_from_avail (Just (L _ rdr_items)) rdr_env imports this_mod
 
                     occs' <- check_occs ie occs [avail]
 
-                    return (ExportAccum ((L loc new_ie, [avail]) : lie_avails) occs')
+                    return (ExportAccum ((cL loc new_ie, [avail]) : lie_avails)
+                              occs')
 
     -------------
     lookup_ie :: IE GhcPs -> RnM (IE GhcRn, AvailInfo)
-    lookup_ie (IEVar _ (L l rdr))
+    lookup_ie (IEVar _ (dL->L l rdr))
         = do (name, avail) <- lookupGreAvailRn $ ieWrappedName rdr
-             return (IEVar noExt (L l (replaceWrappedName rdr name)), avail)
+             return (IEVar noExt (cL l (replaceWrappedName rdr name)), avail)
 
-    lookup_ie (IEThingAbs _ (L l rdr))
+    lookup_ie (IEThingAbs _ (dL->L l rdr))
         = do (name, avail) <- lookupGreAvailRn $ ieWrappedName rdr
-             return (IEThingAbs noExt (L l (replaceWrappedName rdr name))
+             return (IEThingAbs noExt (cL l (replaceWrappedName rdr name))
                     , avail)
 
     lookup_ie ie@(IEThingAll _ n')
@@ -321,18 +326,18 @@ exports_from_avail (Just (L _ rdr_items)) rdr_env imports this_mod
     lookup_ie_with :: LIEWrappedName RdrName -> [LIEWrappedName RdrName]
                    -> RnM (Located Name, [LIEWrappedName Name], [Name],
                            [Located FieldLabel])
-    lookup_ie_with (L l rdr) sub_rdrs
+    lookup_ie_with (dL->L l rdr) sub_rdrs
         = do name <- lookupGlobalOccRn $ ieWrappedName rdr
              (non_flds, flds) <- lookupChildrenExport name sub_rdrs
              if isUnboundName name
-                then return (L l name, [], [name], [])
-                else return (L l name, non_flds
+                then return (cL l name, [], [name], [])
+                else return (cL l name, non_flds
                             , map (ieWrappedName . unLoc) non_flds
                             , flds)
 
     lookup_ie_all :: IE GhcPs -> LIEWrappedName RdrName
                   -> RnM (Located Name, [Name], [FieldLabel])
-    lookup_ie_all ie (L l rdr) =
+    lookup_ie_all ie (dL->L l rdr) =
           do name <- lookupGlobalOccRn $ ieWrappedName rdr
              let gres = findChildren kids_env name
                  (non_flds, flds) = classifyGREs gres
@@ -346,7 +351,7 @@ exports_from_avail (Just (L _ rdr_items)) rdr_env imports this_mod
                   else -- This occurs when you export T(..), but
                        -- only import T abstractly, or T is a synonym.
                        addErr (exportItemErr ie)
-             return (L l name, non_flds, flds)
+             return (cL l name, non_flds, flds)
 
     -------------
     lookup_doc_ie :: IE GhcPs -> RnM (IE GhcRn)
@@ -447,10 +452,11 @@ lookupChildrenExport spec_parent rdr_items =
           case name of
             NameNotFound -> do { ub <- reportUnboundName unboundName
                                ; let l = getLoc n
-                               ; return (Left (L l (IEName (L l ub))))}
-            FoundFL fls -> return $ Right (L (getLoc n) fls)
+                               ; return (Left (cL l (IEName (cL l ub))))}
+            FoundFL fls -> return $ Right (cL (getLoc n) fls)
             FoundName par name -> do { checkPatSynParent spec_parent par name
-                                     ; return $ Left (replaceLWrappedName n name) }
+                                     ; return
+                                       $ Left (replaceLWrappedName n name) }
             IncorrectParent p g td gs -> failWithDcErr p g td gs
 
 
